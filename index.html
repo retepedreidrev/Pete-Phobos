@@ -1,97 +1,866 @@
 <!DOCTYPE html>
 <html lang="sv">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Phobos</title>
-<style>
-body { margin:0; overflow:hidden; background:#0b1a3a; font-family:sans-serif; }
-canvas { display:block; }
-#startScreen {
-  position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
-  background:rgba(0,0,0,0.4); color:white; text-align:center;
-}
-button {
-  padding:15px 30px; border:none; border-radius:20px;
-  background:#ffd1dc; font-size:18px;
-}
-</style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>Phobos</title>
+  <style>
+    :root {
+      --text: #f6f7ff;
+      --hud-bg: rgba(255,255,255,0.10);
+      --hud-border: rgba(255,255,255,0.14);
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body {
+      margin: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: #050814;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      color: var(--text);
+      touch-action: none;
+    }
+
+    body {
+      position: relative;
+      user-select: none;
+      -webkit-user-select: none;
+      -webkit-touch-callout: none;
+    }
+
+    canvas {
+      display: block;
+      width: 100vw;
+      height: 100vh;
+    }
+
+    .hud {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+    }
+
+    .pill {
+      position: absolute;
+      top: max(14px, env(safe-area-inset-top));
+      padding: 12px 16px;
+      border-radius: 18px;
+      border: 1px solid var(--hud-border);
+      background: var(--hud-bg);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      box-shadow: 0 10px 30px rgba(0,0,0,0.22);
+      font-weight: 800;
+      font-size: clamp(16px, 2.4vw, 26px);
+      letter-spacing: 0.02em;
+    }
+
+    #scoreBox { left: max(14px, env(safe-area-inset-left)); }
+    #livesBox {
+      right: max(14px, env(safe-area-inset-right));
+      display: flex;
+      gap: 6px;
+      align-items: center;
+      justify-content: center;
+      min-width: 114px;
+    }
+
+    .lifeShip {
+      display: inline-block;
+      transform: rotate(180deg);
+      font-size: clamp(18px, 2.4vw, 26px);
+      filter: drop-shadow(0 0 8px rgba(255,255,255,0.22));
+    }
+
+    #levelPill {
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: clamp(14px, 2vw, 22px);
+      opacity: 0.9;
+    }
+
+    .overlay {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      background: linear-gradient(180deg, rgba(8,12,32,0.28), rgba(3,5,18,0.72));
+    }
+
+    .panel {
+      width: min(92vw, 720px);
+      border-radius: 28px;
+      border: 1px solid rgba(255,255,255,0.12);
+      background: linear-gradient(180deg, rgba(8,12,38,0.88), rgba(4,7,26,0.94));
+      box-shadow: 0 30px 90px rgba(0,0,0,0.5), inset 0 0 50px rgba(120,150,255,0.08);
+      padding: 34px 26px;
+      text-align: center;
+    }
+
+    h1 {
+      margin: 0 0 12px;
+      font-size: clamp(38px, 6vw, 76px);
+      letter-spacing: 0.08em;
+    }
+
+    p {
+      margin: 12px auto;
+      max-width: 560px;
+      font-size: clamp(17px, 2.7vw, 28px);
+      line-height: 1.5;
+      color: rgba(255,255,255,0.88);
+    }
+
+    .meta {
+      display: flex;
+      justify-content: center;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin: 16px 0 4px;
+      color: rgba(255,255,255,0.74);
+      font-size: clamp(14px, 2vw, 20px);
+    }
+
+    button {
+      margin-top: 16px;
+      pointer-events: auto;
+      border: 0;
+      border-radius: 999px;
+      padding: 18px 34px;
+      font-weight: 900;
+      font-size: clamp(20px, 3vw, 30px);
+      background: linear-gradient(180deg, #ffe8f1, #ffd5e6);
+      color: #2a2448;
+      box-shadow: 0 14px 34px rgba(255, 188, 217, 0.26);
+    }
+
+    button:active { transform: translateY(1px) scale(0.995); }
+
+    #flash {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      background: rgba(255,255,255,0.95);
+      opacity: 0;
+    }
+
+    .hidden { display: none; }
+  </style>
 </head>
 <body>
+  <canvas id="game"></canvas>
 
-<canvas id="game"></canvas>
-
-<div id="startScreen">
-  <div>
-    <h1>PHOBOS</h1>
-    <p>Dra fingret åt höger/vänster för att styra.</p>
-    <button id="startBtn">Starta</button>
+  <div class="hud">
+    <div class="pill" id="scoreBox">PoÃ¤ng: <span id="score">0</span></div>
+    <div class="pill" id="levelPill">NivÃ¥ <span id="level">1</span></div>
+    <div class="pill" id="livesBox"></div>
   </div>
-</div>
 
-<script>
-const canvas = document.getElementById("game");
-const ctx = canvas.getContext("2d");
+  <div class="overlay" id="startOverlay">
+    <div class="panel">
+      <h1>PHOBOS</h1>
+      <p>Styr skeppet i sidled genom den levande korridoren. VÃ¤ggarna rÃ¶r sig uppÃ¥t, passagerna blir smalare och tempot Ã¶kar var 30:e sekund.</p>
+      <div class="meta">
+        <span>ð 3 liv</span>
+        <span>â­ 1 poÃ¤ng per passerat block</span>
+        <span>â¬ï¸ Snabbare och trÃ¤ngre fÃ¶r varje nivÃ¥</span>
+      </div>
+      <button id="startBtn" type="button">Starta</button>
+    </div>
+  </div>
 
-canvas.width = window.innerWidth;
-canvas.height = window.innerHeight;
+  <div class="overlay hidden" id="gameOverOverlay">
+    <div class="panel">
+      <h1>SLUT</h1>
+      <p>Du nÃ¥dde <strong><span id="finalScore">0</span> poÃ¤ng</strong> pÃ¥ nivÃ¥ <strong><span id="finalLevel">1</span></strong>.</p>
+      <div class="meta">
+        <span>BÃ¤sta resultat: <span id="bestScore">0</span></span>
+      </div>
+      <button id="restartBtn" type="button">Spela igen</button>
+    </div>
+  </div>
 
-let running = false;
-let shipX = canvas.width/2;
-let blocks = [];
-let speed = 2;
+  <div id="flash"></div>
 
-document.getElementById("startBtn").addEventListener("click", startGame);
-document.getElementById("startBtn").addEventListener("touchstart", startGame);
+  <script>
+    (() => {
+      const canvas = document.getElementById('game');
+      const ctx = canvas.getContext('2d');
 
-function startGame() {
-  running = true;
-  document.getElementById("startScreen").style.display = "none";
-  loop();
-}
+      const scoreEl = document.getElementById('score');
+      const levelEl = document.getElementById('level');
+      const finalScoreEl = document.getElementById('finalScore');
+      const finalLevelEl = document.getElementById('finalLevel');
+      const bestScoreEl = document.getElementById('bestScore');
+      const livesBox = document.getElementById('livesBox');
+      const startOverlay = document.getElementById('startOverlay');
+      const gameOverOverlay = document.getElementById('gameOverOverlay');
+      const flash = document.getElementById('flash');
+      const startBtn = document.getElementById('startBtn');
+      const restartBtn = document.getElementById('restartBtn');
 
-function spawnBlock() {
-  let side = Math.random() < 0.5 ? "left" : "right";
-  let width = Math.random()*150 + 50;
-  blocks.push({
-    x: side === "left" ? 0 : canvas.width - width,
-    y: canvas.height,
-    w: width,
-    h: 40
-  });
-}
+      const pastelPalette = [
+        '#ffd6e7', '#ffe5b4', '#d8f7d2', '#d3efff',
+        '#eadcff', '#fff1b8', '#ffcfe1', '#c9f7ec'
+      ];
 
-function update() {
-  if (Math.random() < 0.03) spawnBlock();
-  blocks.forEach(b => b.y -= speed);
-  blocks = blocks.filter(b => b.y + b.h > 0);
-}
+      const state = {
+        width: 0,
+        height: 0,
+        dpr: Math.max(1, Math.min(2, window.devicePixelRatio || 1)),
+        running: false,
+        ship: { x: 0, y: 0, width: 0, height: 0, targetX: 0 },
+        rows: [],
+        stars: [],
+        nebulae: [],
+        particles: [],
+        score: 0,
+        best: 0,
+        lives: 3,
+        level: 1,
+        speed: 170,
+        levelTimer: 0,
+        initialGap: 0,
+        minGap: 0,
+        rowHeightMin: 0,
+        rowHeightMax: 0,
+        curvePhase: 0,
+        curveSpeed: 0.55,
+        curveAmplitude: 0,
+        invulnerable: 0,
+        flashAlpha: 0,
+        shake: 0,
+        lastTime: 0,
+        pointerDown: false,
+        gameStartedOnce: false
+      };
 
-function draw() {
-  ctx.clearRect(0,0,canvas.width,canvas.height);
+      function clamp(v, min, max) { return Math.max(min, Math.min(max, v)); }
+      function lerp(a, b, t) { return a + (b - a) * t; }
+      function rand(min, max) { return Math.random() * (max - min) + min; }
+      function randomPastel() { return pastelPalette[Math.floor(Math.random() * pastelPalette.length)]; }
 
-  // ship
-  ctx.fillStyle = "white";
-  ctx.fillRect(shipX-15, canvas.height*0.8, 30, 30);
+      function safeGetBest() {
+        try { return Number(localStorage.getItem('phobos_best') || '0'); }
+        catch { return 0; }
+      }
 
-  // blocks
-  blocks.forEach(b => {
-    ctx.fillStyle = "hsl(" + Math.random()*360 + ",70%,80%)";
-    ctx.fillRect(b.x, b.y, b.w, b.h);
-  });
-}
+      function safeSetBest() {
+        try { localStorage.setItem('phobos_best', String(state.best)); } catch {}
+      }
 
-function loop() {
-  if (!running) return;
-  update();
-  draw();
-  requestAnimationFrame(loop);
-}
+      function resize() {
+        state.width = window.innerWidth;
+        state.height = window.innerHeight;
 
-// controls
-window.addEventListener("mousemove", e => shipX = e.clientX);
-window.addEventListener("touchmove", e => shipX = e.touches[0].clientX);
-</script>
+        canvas.width = Math.round(state.width * state.dpr);
+        canvas.height = Math.round(state.height * state.dpr);
+        ctx.setTransform(state.dpr, 0, 0, state.dpr, 0, 0);
 
+        const baseShip = clamp(state.width * 0.072, 38, 64);
+        state.ship.width = baseShip * 1.5;
+        state.ship.height = state.ship.width * 1.05;
+        state.ship.y = state.height * 0.30;
+        state.ship.x = state.ship.x || state.width * 0.5;
+        state.ship.targetX = state.ship.targetX || state.ship.x;
+
+        state.ship.x = clamp(state.ship.x, state.ship.width * 0.5, state.width - state.ship.width * 0.5);
+        state.ship.targetX = clamp(state.ship.targetX, state.ship.width * 0.5, state.width - state.ship.width * 0.5);
+
+        state.initialGap = state.ship.width * 4;
+        state.minGap = Math.max(state.ship.width * 1.5, state.initialGap * Math.pow(0.85, state.level - 1));
+        state.rowHeightMin = Math.max(58, state.height * 0.05);
+        state.rowHeightMax = Math.max(116, state.height * 0.11);
+        state.curveAmplitude = Math.max(state.ship.width * 1.25, state.width * 0.10);
+
+        if (!state.gameStartedOnce) {
+          seedVisuals();
+        }
+        reseedRows();
+      }
+
+      function seedVisuals() {
+        seedStars();
+        seedNebulae();
+      }
+
+      function seedStars() {
+        state.stars = [];
+        const count = Math.round((state.width * state.height) / 6500);
+        for (let i = 0; i < count; i++) {
+          state.stars.push({
+            x: Math.random() * state.width,
+            y: Math.random() * state.height,
+            r: rand(0.5, 2.2),
+            a: rand(0.15, 0.85),
+            speed: rand(8, 28),
+            hue: Math.random() < 0.18 ? rand(200, 320) : 0
+          });
+        }
+      }
+
+      function seedNebulae() {
+        state.nebulae = [];
+        const count = 5;
+        for (let i = 0; i < count; i++) {
+          state.nebulae.push({
+            x: rand(0, state.width),
+            y: rand(0, state.height),
+            r: rand(state.width * 0.14, state.width * 0.34),
+            hue: rand(210, 320),
+            alpha: rand(0.06, 0.14)
+          });
+        }
+      }
+
+      function targetCenterAtDepth(depthY) {
+        const base = state.width * 0.5;
+        const waveA = Math.sin(depthY * 0.0028 + state.curvePhase) * state.curveAmplitude;
+        const waveB = Math.sin(depthY * 0.0052 + state.curvePhase * 1.4) * state.curveAmplitude * 0.35;
+        const margin = state.minGap * 0.5 + 22;
+        return clamp(base + waveA + waveB, margin, state.width - margin);
+      }
+
+      function makeRow(y, prevCenter, prevGap) {
+        const height = rand(state.rowHeightMin, state.rowHeightMax);
+
+        const arcadeEase = 1 - Math.min(0.55, (state.level - 1) * 0.04);
+        const desiredGap = Math.max(
+          state.minGap,
+          rand(state.minGap, state.initialGap * arcadeEase + state.minGap * (1 - arcadeEase))
+        );
+
+        const waveCenter = targetCenterAtDepth(y);
+        const maxShift = Math.max(state.ship.width * 1.05, state.width * 0.08);
+        const nudged = lerp(prevCenter, waveCenter, 0.48) + rand(-maxShift, maxShift) * 0.25;
+        const center = clamp(
+          nudged,
+          desiredGap * 0.5 + 18,
+          state.width - desiredGap * 0.5 - 18
+        );
+
+        return {
+          y,
+          height,
+          center,
+          gap: Math.max(state.minGap, desiredGap),
+          colorLeft: randomPastel(),
+          colorRight: randomPastel(),
+          scored: false
+        };
+      }
+
+      function seedRows() {
+        state.rows = [];
+        let y = state.height;
+        let center = state.width * 0.5;
+        let gap = state.initialGap;
+
+        while (y > -state.height * 0.45) {
+          const row = makeRow(y, center, gap);
+          state.rows.push(row);
+          y -= row.height;
+          center = row.center;
+          gap = row.gap;
+        }
+      }
+
+      function reseedRows() {
+        if (!state.rows.length) {
+          seedRows();
+          return;
+        }
+
+        const currentRows = [...state.rows].sort((a, b) => b.y - a.y);
+        const closest = currentRows.find(r => r.y <= state.ship.y && r.y + r.height >= state.ship.y) || currentRows[Math.floor(currentRows.length / 2)];
+        const anchorCenter = closest ? clamp(closest.center, state.minGap * 0.5 + 18, state.width - state.minGap * 0.5 - 18) : state.width * 0.5;
+
+        state.rows = [];
+        let y = state.height;
+        let center = anchorCenter;
+        let gap = Math.max(state.minGap, state.initialGap * Math.pow(0.96, state.level - 1));
+
+        while (y > -state.height * 0.45) {
+          const row = makeRow(y, center, gap);
+          state.rows.push(row);
+          y -= row.height;
+          center = row.center;
+          gap = row.gap;
+        }
+      }
+
+      function resetGame() {
+        state.running = false;
+        state.score = 0;
+        state.lives = 3;
+        state.level = 1;
+        state.speed = 170;
+        state.levelTimer = 0;
+        state.invulnerable = 0;
+        state.flashAlpha = 0;
+        state.shake = 0;
+        state.particles = [];
+        state.best = safeGetBest();
+        state.ship.x = state.width * 0.5;
+        state.ship.targetX = state.ship.x;
+        state.initialGap = state.ship.width * 4;
+        state.minGap = state.initialGap;
+        state.curvePhase = 0;
+        seedRows();
+        updateHud();
+      }
+
+      function startGame() {
+        resetGame();
+        startOverlay.classList.add('hidden');
+        gameOverOverlay.classList.add('hidden');
+        state.running = true;
+        state.gameStartedOnce = true;
+        state.lastTime = performance.now();
+        requestAnimationFrame(frame);
+      }
+
+      function levelUp() {
+        state.level += 1;
+        state.speed *= 1.04;
+        state.minGap = Math.max(state.ship.width * 1.5, state.initialGap * Math.pow(0.85, state.level - 1));
+        spawnLevelBurst();
+      }
+
+      function updateHud() {
+        scoreEl.textContent = state.score;
+        levelEl.textContent = state.level;
+        bestScoreEl.textContent = state.best;
+        livesBox.innerHTML = Array.from({ length: 3 }, (_, i) => {
+          const opacity = i < state.lives ? 1 : 0.22;
+          return `<span class="lifeShip" style="opacity:${opacity}">ð</span>`;
+        }).join('');
+      }
+
+      function update(dt) {
+        state.levelTimer += dt;
+        while (state.levelTimer >= 30) {
+          state.levelTimer -= 30;
+          levelUp();
+        }
+
+        state.curvePhase += dt * state.curveSpeed * (1 + (state.level - 1) * 0.03);
+        state.invulnerable = Math.max(0, state.invulnerable - dt);
+        state.flashAlpha = Math.max(0, state.flashAlpha - dt * 4);
+        state.shake = Math.max(0, state.shake - dt * 3.2);
+        flash.style.opacity = String(state.flashAlpha);
+
+        const smoothing = 1 - Math.pow(0.001, dt);
+        state.ship.x = lerp(state.ship.x, state.ship.targetX, smoothing * 0.14);
+        state.ship.x = clamp(state.ship.x, state.ship.width * 0.5, state.width - state.ship.width * 0.5);
+
+        for (const star of state.stars) {
+          star.y += (star.speed + state.speed * 0.02) * dt;
+          if (star.y > state.height + 3) {
+            star.y = -4;
+            star.x = Math.random() * state.width;
+          }
+        }
+
+        for (const row of state.rows) {
+          row.y -= state.speed * dt;
+        }
+
+        for (const row of state.rows) {
+          if (!row.scored && row.y + row.height < state.ship.y) {
+            row.scored = true;
+            state.score += 1;
+            spawnScoreSpark(row.center, row.y + row.height * 0.5);
+            if (state.score > state.best) {
+              state.best = state.score;
+              safeSetBest();
+            }
+          }
+        }
+
+        state.rows = state.rows.filter(row => row.y + row.height > -10);
+        refillRows();
+        updateParticles(dt);
+        handleCollisions();
+        updateHud();
+      }
+
+      function refillRows() {
+        if (!state.rows.length) {
+          seedRows();
+          return;
+        }
+
+        let topY = Infinity;
+        let reference = null;
+        for (const row of state.rows) {
+          if (row.y < topY) {
+            topY = row.y;
+            reference = row;
+          }
+        }
+
+        let y = topY;
+        let center = reference ? reference.center : state.width * 0.5;
+        let gap = reference ? reference.gap : state.initialGap;
+
+        while (y > -state.height * 0.45) {
+          const row = makeRow(y, center, gap);
+          state.rows.push(row);
+          y -= row.height;
+          center = row.center;
+          gap = row.gap;
+        }
+      }
+
+      function shipRect() {
+        return {
+          left: state.ship.x - state.ship.width * 0.28,
+          right: state.ship.x + state.ship.width * 0.28,
+          top: state.ship.y - state.ship.height * 0.30,
+          bottom: state.ship.y + state.ship.height * 0.30
+        };
+      }
+
+      function handleCollisions() {
+        if (state.invulnerable > 0) return;
+
+        const ship = shipRect();
+        for (const row of state.rows) {
+          if (ship.bottom < row.y || ship.top > row.y + row.height) continue;
+
+          const leftWallWidth = row.center - row.gap * 0.5;
+          const rightWallX = row.center + row.gap * 0.5;
+
+          if (ship.left < leftWallWidth || ship.right > rightWallX) {
+            loseLife(row);
+            return;
+          }
+        }
+      }
+
+      function loseLife(row) {
+        state.lives -= 1;
+        state.invulnerable = 1.15;
+        state.flashAlpha = 0.92;
+        state.shake = 0.9;
+
+        const safePadding = state.ship.width * 0.38;
+        const safeLeft = row.center - row.gap * 0.5 + safePadding;
+        const safeRight = row.center + row.gap * 0.5 - safePadding;
+        const target = clamp(row.center, safeLeft, safeRight);
+
+        state.ship.x = target;
+        state.ship.targetX = target;
+
+        spawnCrashBurst(state.ship.x, state.ship.y);
+
+        if (state.lives <= 0) {
+          endGame();
+        }
+      }
+
+      function endGame() {
+        state.running = false;
+        finalScoreEl.textContent = state.score;
+        finalLevelEl.textContent = state.level;
+        bestScoreEl.textContent = state.best;
+        gameOverOverlay.classList.remove('hidden');
+      }
+
+      function updateParticles(dt) {
+        for (const p of state.particles) {
+          p.x += p.vx * dt;
+          p.y += p.vy * dt;
+          p.vx *= (1 - dt * 1.4);
+          p.vy *= (1 - dt * 1.1);
+          p.life -= dt;
+          p.a = Math.max(0, p.life / p.maxLife);
+        }
+        state.particles = state.particles.filter(p => p.life > 0);
+
+        spawnEngineTrail();
+      }
+
+      function spawnEngineTrail() {
+        if (!state.running) return;
+        if (Math.random() > 0.78) return;
+
+        state.particles.push({
+          x: state.ship.x + rand(-8, 8),
+          y: state.ship.y - state.ship.height * 0.38,
+          vx: rand(-10, 10),
+          vy: rand(-55, -20),
+          size: rand(3, 7),
+          color: Math.random() < 0.5 ? 'rgba(180,220,255,0.8)' : 'rgba(255,190,220,0.8)',
+          life: rand(0.18, 0.36),
+          maxLife: 0.36,
+          a: 1
+        });
+      }
+
+      function spawnCrashBurst(x, y) {
+        for (let i = 0; i < 24; i++) {
+          const angle = rand(0, Math.PI * 2);
+          const speed = rand(60, 220);
+          state.particles.push({
+            x,
+            y,
+            vx: Math.cos(angle) * speed,
+            vy: Math.sin(angle) * speed,
+            size: rand(4, 11),
+            color: Math.random() < 0.5 ? 'rgba(255,255,255,0.95)' : 'rgba(255,220,180,0.92)',
+            life: rand(0.22, 0.55),
+            maxLife: 0.55,
+            a: 1
+          });
+        }
+      }
+
+      function spawnScoreSpark(x, y) {
+        for (let i = 0; i < 5; i++) {
+          state.particles.push({
+            x: x + rand(-16, 16),
+            y,
+            vx: rand(-20, 20),
+            vy: rand(-40, 10),
+            size: rand(2, 4),
+            color: 'rgba(255,255,255,0.65)',
+            life: rand(0.18, 0.35),
+            maxLife: 0.35,
+            a: 1
+          });
+        }
+      }
+
+      function spawnLevelBurst() {
+        for (let i = 0; i < 32; i++) {
+          const angle = rand(0, Math.PI * 2);
+          const speed = rand(20, 90);
+          state.particles.push({
+            x: state.width * 0.5,
+            y: state.height * 0.18,
+            vx: Math.cos(angle) * speed,
+            vy: Math.sin(angle) * speed,
+            size: rand(3, 7),
+            color: 'rgba(220,230,255,0.75)',
+            life: rand(0.35, 0.7),
+            maxLife: 0.7,
+            a: 1
+          });
+        }
+      }
+
+      function drawBackground() {
+        const bg = ctx.createLinearGradient(0, 0, 0, state.height);
+        bg.addColorStop(0, '#182d67');
+        bg.addColorStop(0.40, '#0b153f');
+        bg.addColorStop(1, '#02050f');
+        ctx.fillStyle = bg;
+        ctx.fillRect(0, 0, state.width, state.height);
+
+        for (const n of state.nebulae) {
+          const g = ctx.createRadialGradient(n.x, n.y, 0, n.x, n.y, n.r);
+          g.addColorStop(0, `hsla(${n.hue}, 90%, 72%, ${n.alpha})`);
+          g.addColorStop(0.55, `hsla(${n.hue}, 85%, 60%, ${n.alpha * 0.42})`);
+          g.addColorStop(1, 'rgba(0,0,0,0)');
+          ctx.fillStyle = g;
+          ctx.fillRect(n.x - n.r, n.y - n.r, n.r * 2, n.r * 2);
+        }
+
+        const vignette = ctx.createRadialGradient(
+          state.width * 0.5, state.height * 0.35, state.width * 0.12,
+          state.width * 0.5, state.height * 0.35, state.width * 0.8
+        );
+        vignette.addColorStop(0, 'rgba(255,255,255,0.02)');
+        vignette.addColorStop(1, 'rgba(0,0,0,0.28)');
+        ctx.fillStyle = vignette;
+        ctx.fillRect(0, 0, state.width, state.height);
+
+        for (const star of state.stars) {
+          ctx.beginPath();
+          const fill = star.hue
+            ? `hsla(${star.hue}, 100%, 86%, ${star.a})`
+            : `rgba(255,255,255,${star.a})`;
+          ctx.fillStyle = fill;
+          ctx.arc(star.x, star.y, star.r, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+
+      function drawBlock(x, y, w, h, color, isLeft) {
+        if (w <= 0 || h <= 0) return;
+
+        const grad = ctx.createLinearGradient(x, y, x + w, y + h);
+        grad.addColorStop(0, color);
+        grad.addColorStop(1, shadeColor(color, -14));
+        ctx.fillStyle = grad;
+        roundRect(ctx, x, y, w, h, Math.min(18, h * 0.28));
+        ctx.fill();
+
+        ctx.fillStyle = 'rgba(255,255,255,0.18)';
+        roundRect(ctx, x + 3, y + 3, Math.max(0, w - 6), Math.max(0, h * 0.15), Math.min(12, h * 0.2));
+        ctx.fill();
+
+        const edgeGlow = ctx.createLinearGradient(
+          isLeft ? x + w : x,
+          y,
+          isLeft ? x + w - Math.min(20, w) : x + Math.min(20, w),
+          y
+        );
+        edgeGlow.addColorStop(0, 'rgba(255,255,255,0.26)');
+        edgeGlow.addColorStop(1, 'rgba(255,255,255,0)');
+        ctx.fillStyle = edgeGlow;
+        ctx.fillRect(isLeft ? x + w - Math.min(20, w) : x, y, Math.min(20, w), h);
+      }
+
+      function drawRows() {
+        for (const row of state.rows) {
+          const leftWidth = Math.max(0, row.center - row.gap * 0.5);
+          const rightX = row.center + row.gap * 0.5;
+          const rightWidth = Math.max(0, state.width - rightX);
+
+          drawBlock(0, row.y, leftWidth, row.height, row.colorLeft, true);
+          drawBlock(rightX, row.y, rightWidth, row.height, row.colorRight, false);
+        }
+      }
+
+      function drawParticles() {
+        for (const p of state.particles) {
+          ctx.globalAlpha = p.a;
+          ctx.fillStyle = p.color;
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        ctx.globalAlpha = 1;
+      }
+
+      function drawShip() {
+        ctx.save();
+        const wobble = Math.sin(performance.now() * 0.006) * 0.05;
+        ctx.translate(state.ship.x, state.ship.y);
+        ctx.rotate(Math.PI + wobble);
+        ctx.font = `${state.ship.width}px system-ui, Apple Color Emoji, Segoe UI Emoji, sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+
+        ctx.shadowColor = state.invulnerable > 0 ? 'rgba(255,255,255,0.98)' : 'rgba(170,220,255,0.72)';
+        ctx.shadowBlur = state.invulnerable > 0 ? 30 : 18;
+
+        if (state.invulnerable > 0) {
+          ctx.globalAlpha = 0.55 + Math.sin(performance.now() * 0.03) * 0.25;
+        }
+
+        ctx.fillText('ð', 0, 0);
+        ctx.restore();
+        ctx.globalAlpha = 1;
+      }
+
+      function draw() {
+        drawBackground();
+
+        const shakeX = state.shake > 0 ? Math.sin(performance.now() * 0.08) * state.shake * 9 : 0;
+        const shakeY = state.shake > 0 ? Math.cos(performance.now() * 0.1) * state.shake * 6 : 0;
+
+        ctx.save();
+        ctx.translate(shakeX, shakeY);
+        drawRows();
+        drawParticles();
+        drawShip();
+        ctx.restore();
+      }
+
+      function frame(now) {
+        if (!state.running) {
+          draw();
+          return;
+        }
+
+        const dt = Math.min(0.033, ((now - state.lastTime) / 1000) || 0.016);
+        state.lastTime = now;
+
+        update(dt);
+        draw();
+
+        if (state.running) requestAnimationFrame(frame);
+      }
+
+      function setShipTargetX(clientX) {
+        state.ship.targetX = clamp(clientX, state.ship.width * 0.5, state.width - state.ship.width * 0.5);
+      }
+
+      function bindButton(btn, fn) {
+        btn.addEventListener('click', fn);
+        btn.addEventListener('touchstart', (e) => {
+          e.preventDefault();
+          fn();
+        }, { passive: false });
+      }
+
+      function shadeColor(hex, percent) {
+        const num = parseInt(hex.slice(1), 16);
+        let r = (num >> 16) + percent;
+        let g = ((num >> 8) & 0x00FF) + percent;
+        let b = (num & 0x0000FF) + percent;
+        r = clamp(Math.round(r), 0, 255);
+        g = clamp(Math.round(g), 0, 255);
+        b = clamp(Math.round(b), 0, 255);
+        return `rgb(${r}, ${g}, ${b})`;
+      }
+
+      function roundRect(ctx, x, y, width, height, radius) {
+        const r = Math.min(radius, width * 0.5, height * 0.5);
+        ctx.beginPath();
+        ctx.moveTo(x + r, y);
+        ctx.arcTo(x + width, y, x + width, y + height, r);
+        ctx.arcTo(x + width, y + height, x, y + height, r);
+        ctx.arcTo(x, y + height, x, y, r);
+        ctx.arcTo(x, y, x + width, y, r);
+        ctx.closePath();
+      }
+
+      bindButton(startBtn, startGame);
+      bindButton(restartBtn, startGame);
+
+      window.addEventListener('pointerdown', (e) => {
+        if (!state.running) return;
+        state.pointerDown = true;
+        setShipTargetX(e.clientX);
+      });
+
+      window.addEventListener('pointermove', (e) => {
+        if (!state.running || !state.pointerDown) return;
+        setShipTargetX(e.clientX);
+      });
+
+      window.addEventListener('pointerup', () => { state.pointerDown = false; });
+      window.addEventListener('pointercancel', () => { state.pointerDown = false; });
+
+      window.addEventListener('touchmove', (e) => {
+        if (!state.running || !e.touches[0]) return;
+        setShipTargetX(e.touches[0].clientX);
+      }, { passive: true });
+
+      window.addEventListener('mousemove', (e) => {
+        if (!state.running) return;
+        if (e.buttons) setShipTargetX(e.clientX);
+      });
+
+      window.addEventListener('resize', () => {
+        resize();
+        draw();
+      });
+
+      resize();
+      resetGame();
+      draw();
+    })();
+  </script>
 </body>
 </html>
