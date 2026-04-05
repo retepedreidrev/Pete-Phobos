@@ -9,6 +9,7 @@
       --text: #f6f7ff;
       --hud-bg: rgba(255,255,255,0.10);
       --hud-border: rgba(255,255,255,0.14);
+      --emoji-font: "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",system-ui,sans-serif;
     }
 
     * { box-sizing: border-box; }
@@ -37,10 +38,35 @@
       height: 100vh;
     }
 
+    #ship {
+      position: fixed;
+      left: 50vw;
+      top: 30vh;
+      width: 1px;
+      height: 1px;
+      pointer-events: none;
+      z-index: 4;
+      transform: translate(-50%, -50%);
+      filter: drop-shadow(0 0 14px rgba(170,220,255,0.7));
+    }
+
+    #ship .emoji {
+      position: absolute;
+      left: 0;
+      top: 0;
+      transform: translate(-50%, -50%) rotate(180deg);
+      transform-origin: center center;
+      font-family: var(--emoji-font);
+      line-height: 1;
+      text-shadow: 0 0 18px rgba(255,255,255,0.32);
+      will-change: transform, opacity, filter;
+    }
+
     .hud {
       position: fixed;
       inset: 0;
       pointer-events: none;
+      z-index: 5;
     }
 
     .pill {
@@ -60,6 +86,7 @@
       align-items: center;
       justify-content: center;
       gap: 8px;
+      white-space: nowrap;
     }
 
     #scoreBox {
@@ -71,12 +98,15 @@
     #livesBox {
       right: max(14px, env(safe-area-inset-right));
       min-width: 114px;
+      gap: 4px;
     }
 
     .lifeShip {
       display: inline-block;
       transform: rotate(180deg);
+      font-family: var(--emoji-font);
       font-size: clamp(18px, 2.4vw, 26px);
+      line-height: 1;
       filter: drop-shadow(0 0 8px rgba(255,255,255,0.22));
     }
 
@@ -88,6 +118,7 @@
       justify-content: center;
       padding: 24px;
       background: linear-gradient(180deg, rgba(8,12,32,0.28), rgba(3,5,18,0.72));
+      z-index: 6;
     }
 
     .panel {
@@ -124,6 +155,13 @@
       font-size: clamp(14px, 2vw, 20px);
     }
 
+    .emojiInline {
+      font-family: var(--emoji-font);
+      display: inline-block;
+      transform: rotate(180deg);
+      line-height: 1;
+    }
+
     button {
       margin-top: 16px;
       pointer-events: auto;
@@ -146,6 +184,7 @@
       pointer-events: none;
       background: rgba(255,255,255,0.95);
       opacity: 0;
+      z-index: 7;
     }
 
     .hidden { display: none; }
@@ -153,6 +192,7 @@
 </head>
 <body>
   <canvas id="game"></canvas>
+  <div id="ship"><div class="emoji" id="shipEmoji">&#x1F680;</div></div>
 
   <div class="hud">
     <div class="pill" id="scoreBox">PoÃ¤ng: <span id="score">0</span></div>
@@ -164,7 +204,7 @@
       <h1>PHOBOS</h1>
       <p>Styr skeppet i sidled genom den levande korridoren. VÃ¤ggarna rÃ¶r sig uppÃ¥t, passagerna blir smalare och tempot Ã¶kar var 30:e sekund.</p>
       <div class="meta">
-        <span>ð 3 liv</span>
+        <span><span class="emojiInline">&#x1F680;</span> 3 liv</span>
         <span>â­ 1 poÃ¤ng per passerat block</span>
         <span>â¬ï¸ Snabbare och trÃ¤ngre fÃ¶r varje nivÃ¥</span>
       </div>
@@ -200,6 +240,10 @@
       const flash = document.getElementById('flash');
       const startBtn = document.getElementById('startBtn');
       const restartBtn = document.getElementById('restartBtn');
+      const shipEl = document.getElementById('ship');
+      const shipEmojiEl = document.getElementById('shipEmoji');
+
+      const ROCKET = '&#x1F680;';
 
       const pastelPalette = [
         '#ffd6e7', '#ffe5b4', '#d8f7d2', '#d3efff',
@@ -275,10 +319,13 @@
         state.rowHeightMax = Math.max(116, state.height * 0.11);
         state.curveAmplitude = Math.max(state.ship.width * 1.25, state.width * 0.10);
 
+        shipEmojiEl.style.fontSize = `${state.ship.width}px`;
+
         if (!state.gameStartedOnce) {
           seedVisuals();
         }
         reseedRows();
+        syncShip();
       }
 
       function seedVisuals() {
@@ -322,7 +369,7 @@
         return clamp(base + waveA + waveB, margin, state.width - margin);
       }
 
-      function makeRow(y, prevCenter, prevGap) {
+      function makeRow(bottomY, prevCenter) {
         const height = rand(state.rowHeightMin, state.rowHeightMax);
 
         const arcadeEase = 1 - Math.min(0.55, (state.level - 1) * 0.04);
@@ -331,7 +378,7 @@
           rand(state.minGap, state.initialGap * arcadeEase + state.minGap * (1 - arcadeEase))
         );
 
-        const waveCenter = targetCenterAtDepth(y);
+        const waveCenter = targetCenterAtDepth(bottomY);
         const maxShift = Math.max(state.ship.width * 1.05, state.width * 0.08);
         const nudged = lerp(prevCenter, waveCenter, 0.48) + rand(-maxShift, maxShift) * 0.25;
         const center = clamp(
@@ -341,7 +388,7 @@
         );
 
         return {
-          y,
+          y: bottomY - height,
           height,
           center,
           gap: Math.max(state.minGap, desiredGap),
@@ -353,16 +400,14 @@
 
       function seedRows() {
         state.rows = [];
-        let y = state.height;
+        let bottomY = state.height;
         let center = state.width * 0.5;
-        let gap = state.initialGap;
 
-        while (y > -state.height * 0.45) {
-          const row = makeRow(y, center, gap);
+        while (bottomY > -state.height * 0.45) {
+          const row = makeRow(bottomY, center);
           state.rows.push(row);
-          y -= row.height; // exactly contiguous, no overlap and no gaps
+          bottomY = row.y;
           center = row.center;
-          gap = row.gap;
         }
       }
 
@@ -377,16 +422,14 @@
         const anchorCenter = closest ? clamp(closest.center, state.minGap * 0.5 + 18, state.width - state.minGap * 0.5 - 18) : state.width * 0.5;
 
         state.rows = [];
-        let y = state.height;
+        let bottomY = state.height;
         let center = anchorCenter;
-        let gap = Math.max(state.minGap, state.initialGap * Math.pow(0.96, state.level - 1));
 
-        while (y > -state.height * 0.45) {
-          const row = makeRow(y, center, gap);
+        while (bottomY > -state.height * 0.45) {
+          const row = makeRow(bottomY, center);
           state.rows.push(row);
-          y -= row.height; // exactly contiguous
+          bottomY = row.y;
           center = row.center;
-          gap = row.gap;
         }
       }
 
@@ -401,17 +444,14 @@
           if (row.y < topMost.y) topMost = row;
         }
 
-        let nextBottom = topMost.y;
+        let bottomY = topMost.y;
         let center = topMost.center;
-        let gap = topMost.gap;
 
-        while (nextBottom > -state.height * 0.45) {
-          const row = makeRow(nextBottom - rand(state.rowHeightMin, state.rowHeightMax), center, gap);
-          row.y = nextBottom - row.height; // continuous wall
+        while (bottomY > -state.height * 0.45) {
+          const row = makeRow(bottomY, center);
           state.rows.push(row);
-          nextBottom = row.y;
+          bottomY = row.y;
           center = row.center;
-          gap = row.gap;
         }
       }
 
@@ -434,6 +474,7 @@
         state.curvePhase = 0;
         seedRows();
         updateHud();
+        syncShip();
       }
 
       function startGame() {
@@ -458,56 +499,8 @@
         bestScoreEl.textContent = state.best;
         livesBox.innerHTML = Array.from({ length: 3 }, (_, i) => {
           const opacity = i < state.lives ? 1 : 0.22;
-          return `<span class="lifeShip" style="opacity:${opacity}">ð</span>`;
+          return `<span class="lifeShip" style="opacity:${opacity}">&#x1F680;</span>`;
         }).join('');
-      }
-
-      function update(dt) {
-        state.levelTimer += dt;
-        while (state.levelTimer >= 30) {
-          state.levelTimer -= 30;
-          levelUp();
-        }
-
-        state.curvePhase += dt * state.curveSpeed * (1 + (state.level - 1) * 0.03);
-        state.invulnerable = Math.max(0, state.invulnerable - dt);
-        state.flashAlpha = Math.max(0, state.flashAlpha - dt * 4);
-        state.shake = Math.max(0, state.shake - dt * 3.2);
-        flash.style.opacity = String(state.flashAlpha);
-
-        const smoothing = 1 - Math.pow(0.001, dt);
-        state.ship.x = lerp(state.ship.x, state.ship.targetX, smoothing * 0.14);
-        state.ship.x = clamp(state.ship.x, state.ship.width * 0.5, state.width - state.ship.width * 0.5);
-
-        for (const star of state.stars) {
-          star.y += (star.speed + state.speed * 0.02) * dt;
-          if (star.y > state.height + 3) {
-            star.y = -4;
-            star.x = Math.random() * state.width;
-          }
-        }
-
-        for (const row of state.rows) {
-          row.y -= state.speed * dt;
-        }
-
-        for (const row of state.rows) {
-          if (!row.scored && row.y + row.height < state.ship.y) {
-            row.scored = true;
-            state.score += 1;
-            spawnScoreSpark(row.center, row.y + row.height * 0.5);
-            if (state.score > state.best) {
-              state.best = state.score;
-              safeSetBest();
-            }
-          }
-        }
-
-        state.rows = state.rows.filter(row => row.y + row.height > -2);
-        refillRows();
-        updateParticles(dt);
-        handleCollisions();
-        updateHud();
       }
 
       function shipRect() {
@@ -549,7 +542,7 @@
 
         state.ship.x = target;
         state.ship.targetX = target;
-
+        syncShip();
         spawnCrashBurst(state.ship.x, state.ship.y);
 
         if (state.lives <= 0) {
@@ -647,6 +640,66 @@
         }
       }
 
+      function update(dt) {
+        state.levelTimer += dt;
+        while (state.levelTimer >= 30) {
+          state.levelTimer -= 30;
+          levelUp();
+        }
+
+        state.curvePhase += dt * state.curveSpeed * (1 + (state.level - 1) * 0.03);
+        state.invulnerable = Math.max(0, state.invulnerable - dt);
+        state.flashAlpha = Math.max(0, state.flashAlpha - dt * 4);
+        state.shake = Math.max(0, state.shake - dt * 3.2);
+        flash.style.opacity = String(state.flashAlpha);
+
+        const smoothing = 1 - Math.pow(0.001, dt);
+        state.ship.x = lerp(state.ship.x, state.ship.targetX, smoothing * 0.14);
+        state.ship.x = clamp(state.ship.x, state.ship.width * 0.5, state.width - state.ship.width * 0.5);
+
+        for (const star of state.stars) {
+          star.y += (star.speed + state.speed * 0.02) * dt;
+          if (star.y > state.height + 3) {
+            star.y = -4;
+            star.x = Math.random() * state.width;
+          }
+        }
+
+        for (const row of state.rows) {
+          row.y -= state.speed * dt;
+        }
+
+        for (const row of state.rows) {
+          if (!row.scored && row.y + row.height < state.ship.y) {
+            row.scored = true;
+            state.score += 1;
+            spawnScoreSpark(row.center, row.y + row.height * 0.5);
+            if (state.score > state.best) {
+              state.best = state.score;
+              safeSetBest();
+            }
+          }
+        }
+
+        state.rows = state.rows.filter(row => row.y + row.height > -2);
+        refillRows();
+        updateParticles(dt);
+        handleCollisions();
+        updateHud();
+        syncShip();
+      }
+
+      function syncShip() {
+        const wobble = Math.sin(performance.now() * 0.006) * 0.05;
+        shipEl.style.left = `${state.ship.x}px`;
+        shipEl.style.top = `${state.ship.y}px`;
+        shipEmojiEl.style.transform = `translate(-50%, -50%) rotate(${180 + wobble * 57.2958}deg)`;
+        shipEmojiEl.style.opacity = state.invulnerable > 0 ? String(0.55 + Math.sin(performance.now() * 0.03) * 0.25) : '1';
+        shipEl.style.filter = state.invulnerable > 0
+          ? 'drop-shadow(0 0 24px rgba(255,255,255,0.98))'
+          : 'drop-shadow(0 0 14px rgba(170,220,255,0.7))';
+      }
+
       function drawBackground() {
         const bg = ctx.createLinearGradient(0, 0, 0, state.height);
         bg.addColorStop(0, '#182d67');
@@ -682,6 +735,28 @@
           ctx.arc(star.x, star.y, star.r, 0, Math.PI * 2);
           ctx.fill();
         }
+      }
+
+      function roundRect(ctx, x, y, width, height, radius) {
+        const r = Math.min(radius, width * 0.5, height * 0.5);
+        ctx.beginPath();
+        ctx.moveTo(x + r, y);
+        ctx.arcTo(x + width, y, x + width, y + height, r);
+        ctx.arcTo(x + width, y + height, x, y + height, r);
+        ctx.arcTo(x, y + height, x, y, r);
+        ctx.arcTo(x, y, x + width, y, r);
+        ctx.closePath();
+      }
+
+      function shadeColor(hex, percent) {
+        const num = parseInt(hex.slice(1), 16);
+        let r = (num >> 16) + percent;
+        let g = ((num >> 8) & 0x00FF) + percent;
+        let b = (num & 0x0000FF) + percent;
+        r = clamp(Math.round(r), 0, 255);
+        g = clamp(Math.round(g), 0, 255);
+        b = clamp(Math.round(b), 0, 255);
+        return `rgb(${r}, ${g}, ${b})`;
       }
 
       function drawRoundedRect(x, y, w, h, radius, fillStyle) {
@@ -744,27 +819,6 @@
         ctx.globalAlpha = 1;
       }
 
-      function drawShip() {
-        ctx.save();
-        const wobble = Math.sin(performance.now() * 0.006) * 0.05;
-        ctx.translate(state.ship.x, state.ship.y);
-        ctx.rotate(Math.PI + wobble); // nose downward
-        ctx.font = `${state.ship.width}px system-ui, Apple Color Emoji, Segoe UI Emoji, sans-serif`;
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-
-        ctx.shadowColor = state.invulnerable > 0 ? 'rgba(255,255,255,0.98)' : 'rgba(170,220,255,0.72)';
-        ctx.shadowBlur = state.invulnerable > 0 ? 30 : 18;
-
-        if (state.invulnerable > 0) {
-          ctx.globalAlpha = 0.55 + Math.sin(performance.now() * 0.03) * 0.25;
-        }
-
-        ctx.fillText('ð', 0, 0);
-        ctx.restore();
-        ctx.globalAlpha = 1;
-      }
-
       function draw() {
         drawBackground();
 
@@ -775,7 +829,6 @@
         ctx.translate(shakeX, shakeY);
         drawRows();
         drawParticles();
-        drawShip();
         ctx.restore();
       }
 
@@ -804,28 +857,6 @@
           e.preventDefault();
           fn();
         }, { passive: false });
-      }
-
-      function shadeColor(hex, percent) {
-        const num = parseInt(hex.slice(1), 16);
-        let r = (num >> 16) + percent;
-        let g = ((num >> 8) & 0x00FF) + percent;
-        let b = (num & 0x0000FF) + percent;
-        r = clamp(Math.round(r), 0, 255);
-        g = clamp(Math.round(g), 0, 255);
-        b = clamp(Math.round(b), 0, 255);
-        return `rgb(${r}, ${g}, ${b})`;
-      }
-
-      function roundRect(ctx, x, y, width, height, radius) {
-        const r = Math.min(radius, width * 0.5, height * 0.5);
-        ctx.beginPath();
-        ctx.moveTo(x + r, y);
-        ctx.arcTo(x + width, y, x + width, y + height, r);
-        ctx.arcTo(x + width, y + height, x, y + height, r);
-        ctx.arcTo(x, y + height, x, y, r);
-        ctx.arcTo(x, y, x + width, y, r);
-        ctx.closePath();
       }
 
       bindButton(startBtn, startGame);
