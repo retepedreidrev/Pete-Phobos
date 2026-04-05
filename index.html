@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Phobos</title>
+<style>
+body { margin:0; overflow:hidden; background:#0b1a3a; font-family:sans-serif; }
+canvas { display:block; }
+#startScreen {
+  position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+  background:rgba(0,0,0,0.4); color:white; text-align:center;
+}
+button {
+  padding:15px 30px; border:none; border-radius:20px;
+  background:#ffd1dc; font-size:18px;
+}
+</style>
+</head>
+<body>
+
+<canvas id="game"></canvas>
+
+<div id="startScreen">
+  <div>
+    <h1>PHOBOS</h1>
+    <p>Dra fingret åt höger/vänster för att styra.</p>
+    <button id="startBtn">Starta</button>
+  </div>
+</div>
+
+<script>
+const canvas = document.getElementById("game");
+const ctx = canvas.getContext("2d");
+
+canvas.width = window.innerWidth;
+canvas.height = window.innerHeight;
+
+let running = false;
+let shipX = canvas.width/2;
+let blocks = [];
+let speed = 2;
+
+document.getElementById("startBtn").addEventListener("click", startGame);
+document.getElementById("startBtn").addEventListener("touchstart", startGame);
+
+function startGame() {
+  running = true;
+  document.getElementById("startScreen").style.display = "none";
+  loop();
+}
+
+function spawnBlock() {
+  let side = Math.random() < 0.5 ? "left" : "right";
+  let width = Math.random()*150 + 50;
+  blocks.push({
+    x: side === "left" ? 0 : canvas.width - width,
+    y: canvas.height,
+    w: width,
+    h: 40
+  });
+}
+
+function update() {
+  if (Math.random() < 0.03) spawnBlock();
+  blocks.forEach(b => b.y -= speed);
+  blocks = blocks.filter(b => b.y + b.h > 0);
+}
+
+function draw() {
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+
+  // ship
+  ctx.fillStyle = "white";
+  ctx.fillRect(shipX-15, canvas.height*0.8, 30, 30);
+
+  // blocks
+  blocks.forEach(b => {
+    ctx.fillStyle = "hsl(" + Math.random()*360 + ",70%,80%)";
+    ctx.fillRect(b.x, b.y, b.w, b.h);
+  });
+}
+
+function loop() {
+  if (!running) return;
+  update();
+  draw();
+  requestAnimationFrame(loop);
+}
+
+// controls
+window.addEventListener("mousemove", e => shipX = e.clientX);
+window.addEventListener("touchmove", e => shipX = e.touches[0].clientX);
+</script>
+
+</body>
+</html>
